@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <math.h>
 #define FTYPE long double
 
@@ -39,7 +40,7 @@ FTYPE getB(int argc, int* argv, FTYPE source[7][2]) {
 FTYPE evaluate(FTYPE* function, FTYPE x) {
 	FTYPE result = 0;
 	for (int i = 0; i<length; i++) {
-		result = function[i] * powl(x, i);
+		result += function[i] * powl(x, i);
 	}
 	return result;
 }
@@ -52,17 +53,82 @@ FTYPE* D(FTYPE* function) {
 	return result;
 }
 
-int main(int argc, const char * argv[]) {
-	FTYPE cache[7][2];
-	FTYPE simpleFormOfPolynom[7];
-	FTYPE stringOfCoeffs[7];
+FTYPE* calculateSplineCoefs(FTYPE* function, FTYPE points[7][2], int i) {
+	FTYPE xi = points[i][0];
+	FTYPE xi1 = points[i+1][0];
+	
+	FTYPE* pnd = D(function);
+	
+	FTYPE fi = evaluate(function, xi);
+	FTYPE fi1 = evaluate(function, xi1);
+	FTYPE pdi = evaluate(pnd, xi);
+	FTYPE pdi1 = evaluate(pnd, xi1);
+	FTYPE dfi = fi1-fi;
+	FTYPE H = xi1-xi;
+	FTYPE dh3 = powl(xi1-xi, 3.0);
+	
+	FTYPE a3 = ((pdi1 * H - 2.0 * dfi + pdi * H) / dh3);
+	FTYPE a2 = ((-pdi1 * H * (xi1 + 2.0 * xi) + 3.0 * dfi * (xi1 + xi) - pdi * H * (xi + 2.0 * xi1)) / dh3);
+	FTYPE a1 = ((pdi1 * xi * (xi + 2.0 * xi1) * H - 6.0 * dfi * xi * xi1 + pdi * xi1 * (xi1 + 2.0 * xi) * H) / dh3);
+	FTYPE a0 = ((-pdi1 * xi * xi * xi1 * H + fi1 * xi * xi * (3.0 * xi1 - xi) + fi * xi1 * xi1 * (xi1 - 3.0 * xi) - pdi * xi * xi1 * xi1 * H) / dh3);
+	
+	FTYPE* res = malloc(4*sizeof(FTYPE));
+	res[0] = a0;
+	res[1] = a1;
+	res[2] = a2;
+	res[3] = a3;
+	return res;
+}
+
+FTYPE** getAllSplineCoefs(FTYPE* function, FTYPE points[7][2]) {
+	FTYPE** coefs = malloc(sizeof(FTYPE*)*length);
+	for (int i = 0; i<length; i++) {
+		coefs[i] = malloc(sizeof(FTYPE)*4);
+	}
+	for (int i = 0; i<length; i++) {
+		for (int j = 0; j<4; j++) {
+			coefs[i][j] = 0;
+		}
+	}
+	FTYPE* line = NULL;
+	for (int i = 0; i<length-1; i++) {
+		line = calculateSplineCoefs(function, points, i);
+		for (int j = 0; j<4; j++) {
+			coefs[i][j] = line[j];
+		}
+	}
+	return coefs;
+}
+
+FTYPE calculateInPoint (FTYPE** splineCoefs, FTYPE points[7][2], FTYPE x) {
+	FTYPE result = 0;
+	bool inBounds = false;
+	for (int i = 0; i<length-1; i++) {
+		if ((x >= sourceData[i][0]) && (x <= sourceData[i+1][0])) {
+			inBounds = true;
+			for (int j = 0; j<4; j++) {
+				result += splineCoefs[i][j] * powl(x, j);
+			}
+		}
+	}
+	if (inBounds) {
+		return result;
+	} else {
+		printf("Error: Not in spline bounds\n");
+		return 0;
+	}
+}
+
+static void makeCache(long double (*cache)[2]) {
 	for (int i = 0; i<4; i++) {
 		cache[i][0] = sourceData[6-i][0];
 		cache[6-i][0] = sourceData[i][0];
 		cache[i][1] = sourceData[6-i][1];
 		cache[6-i][1] = sourceData[i][1];
 	}
-	printf("Interpolation:\nP_N(x)=");
+}
+
+static void primaryInterpolation(long double (*cache)[2], long double *stringOfCoeffs) {
 	for (int i = 0; i<length; i++) {
 		int xs[7];
 		int len = i+1;
@@ -78,7 +144,9 @@ int main(int argc, const char * argv[]) {
 			printf("+");
 		}
 	}
-	printf("\nSimplified:\n");
+}
+
+static void simplifyInterpolation(long double (*cache)[2], long double *simpleFormOfPolynom, long double *stringOfCoeffs) {
 	FTYPE brackets[7][2];
 	for (int i = 0; i<6; i++) {
 		brackets[i][0]=(-1)*cache[i][0];
@@ -119,6 +187,48 @@ int main(int argc, const char * argv[]) {
 			}
 		}
 	}
+}
+
+int main(int argc, const char * argv[]) {
+	FTYPE cache[7][2];
+	FTYPE simpleFormOfPolynom[7];
+	for (int i = 0; i<7; i++) {
+		simpleFormOfPolynom[i] = 0;
+	}
+	FTYPE stringOfCoeffs[7];
+	makeCache(cache);
+	for (int i = 0; i<length; i++) {
+		printf("{%Lf, %Lf}\n",cache[i][0],cache[i][1]);
+	}
+	printf("Interpolation:\nP_N(x)=");
+	primaryInterpolation(cache, stringOfCoeffs);
+	printf("\n\nSimplified:\n");
+	simplifyInterpolation(cache, simpleFormOfPolynom, stringOfCoeffs);
 	printf("\n");
+	printf("\nSpline coefs:\n");
+	for (int i = 0; i<length; i++) {
+		cache[i][0] = sourceData[i][0];
+		cache[i][1] = sourceData[i][1];
+	}
+	FTYPE** coefs = getAllSplineCoefs(simpleFormOfPolynom, cache);
+	for (int i = 0; i<length-1; i++) {
+		printf("{");
+		for (int j = 0; j<4; j++) {
+			if (j < 3) {
+				printf("%Lf,", coefs[i][j]);
+			} else {
+				printf("%Lf", coefs[i][j]);
+			}
+		}
+		printf("}");
+		if (i<length-2) {
+			printf(",\n");
+		}
+	}
+	printf("\nInput x point: ");
+	FTYPE x;
+	scanf("%Lf", &x);
+	FTYPE result = calculateInPoint(coefs, sourceData, x);
+	printf("S(%Lf)=%Lf\n", x, result);
 	return 0;
 }
