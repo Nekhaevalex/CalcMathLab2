@@ -17,6 +17,10 @@ FTYPE sourceData[7][2] = {{0.17453, 0.000012}, {0.52360, 0.00026}, {0.87267, 0.0
 		1.38035}};
 int length = 7;
 
+//FTYPE sourceData[6][2] = {{0.17453, 0.00162}, {0.5236, 0.00252}, {0.87267, 0.00498}, {1.22173,
+//	0.0129}, {1.5708, 0.03964}, {1.91986, 0.1207}};
+//int length = 6;
+
 FTYPE getB(int argc, int* argv, FTYPE source[7][2]) {
 	if (argc == 1) {
 		return source[argv[0]][1];
@@ -40,7 +44,7 @@ FTYPE getB(int argc, int* argv, FTYPE source[7][2]) {
 FTYPE evaluate(FTYPE* function, FTYPE x) {
 	FTYPE result = 0;
 	for (int i = 0; i<length; i++) {
-		result += function[i] * powl(x, i);
+		result += function[i] * powl(x, (FTYPE)i);
 	}
 	return result;
 }
@@ -87,7 +91,7 @@ FTYPE** getAllSplineCoefs(FTYPE* function, FTYPE points[7][2]) {
 	}
 	for (int i = 0; i<length; i++) {
 		for (int j = 0; j<4; j++) {
-			coefs[i][j] = 0;
+			coefs[i][j] = 0.0;
 		}
 	}
 	FTYPE* line = NULL;
@@ -120,11 +124,11 @@ FTYPE calculateInPoint (FTYPE** splineCoefs, FTYPE points[7][2], FTYPE x) {
 }
 
 static void makeCache(long double (*cache)[2]) {
-	for (int i = 0; i<4; i++) {
-		cache[i][0] = sourceData[6-i][0];
-		cache[6-i][0] = sourceData[i][0];
-		cache[i][1] = sourceData[6-i][1];
-		cache[6-i][1] = sourceData[i][1];
+	for (int i = 0; i<length/2+1; i++) {
+		cache[i][0] = sourceData[length-1-i][0];
+		cache[length-1-i][0] = sourceData[i][0];
+		cache[i][1] = sourceData[length-1-i][1];
+		cache[length-1-i][1] = sourceData[i][1];
 	}
 }
 
@@ -150,11 +154,11 @@ static void simplifyInterpolation(long double (*cache)[2], long double *simpleFo
 	FTYPE brackets[7][2];
 	for (int i = 0; i<6; i++) {
 		brackets[i][0]=(-1)*cache[i][0];
-		brackets[i][1]=1;
+		brackets[i][1]=1.0;
 	}
 	FTYPE last[7];
 	for (int i = 0; i<7; i++) {
-		last[i] = 0;
+		last[i] = 0.0;
 	}
 	FTYPE lastW[7];
 	for (int i = 0; i<7; i++) {
@@ -173,7 +177,7 @@ static void simplifyInterpolation(long double (*cache)[2], long double *simpleFo
 			}
 			for (int j = 0; j<length; j++) {
 				last[j] = lastW[j];
-				lastW[j] = 0;
+				lastW[j] = 0.0;
 			}
 		}
 	}
@@ -182,9 +186,9 @@ static void simplifyInterpolation(long double (*cache)[2], long double *simpleFo
 			printf("%Lf", simpleFormOfPolynom[i]);
 		} else {
 			printf("%Lf*x^%d", simpleFormOfPolynom[i], i);
-			if (i<length-1) {
-				printf("+");
-			}
+		}
+		if ((i<length-1) && (simpleFormOfPolynom[i+1]>0)) {
+			printf("+");
 		}
 	}
 }
@@ -193,14 +197,18 @@ int main(int argc, const char * argv[]) {
 	FTYPE cache[7][2];
 	FTYPE simpleFormOfPolynom[7];
 	for (int i = 0; i<7; i++) {
-		simpleFormOfPolynom[i] = 0;
+		simpleFormOfPolynom[i] = 0.0;
 	}
 	FTYPE stringOfCoeffs[7];
+	for (int i = 0; i<7; i++) {
+		stringOfCoeffs[i] = 0.0;
+	}
 	makeCache(cache);
+	printf("Input data:\n");
 	for (int i = 0; i<length; i++) {
 		printf("{%Lf, %Lf}\n",cache[i][0],cache[i][1]);
 	}
-	printf("Interpolation:\nP_N(x)=");
+	printf("\nInterpolation:\nP_N(x)=");
 	primaryInterpolation(cache, stringOfCoeffs);
 	printf("\n\nSimplified:\n");
 	simplifyInterpolation(cache, simpleFormOfPolynom, stringOfCoeffs);
